@@ -92,10 +92,19 @@ populate_google_ipset() {
   tmp_json="$(mktemp)"
   tmp_ranges="$(mktemp)"
 
-  if ! curl -fsSL --max-time 20 "$GOOGLE_RANGES_URL" -o "$tmp_json"; then
-    rm -f "$tmp_json" "$tmp_ranges"
-    log "failed to fetch Google IP ranges"
-    return
+  if ! curl -4fsSL --retry 2 --connect-timeout 8 --max-time 25 "$GOOGLE_RANGES_URL" -o "$tmp_json"; then
+    if ip link show "$WG_INTERFACE" >/dev/null 2>&1; then
+      if ! curl -4fsSL --interface "$WG_INTERFACE" --retry 2 --connect-timeout 8 --max-time 25 "$GOOGLE_RANGES_URL" -o "$tmp_json"; then
+        rm -f "$tmp_json" "$tmp_ranges"
+        log "failed to fetch Google IP ranges"
+        return
+      fi
+      log "fetched Google IP ranges via ${WG_INTERFACE}"
+    else
+      rm -f "$tmp_json" "$tmp_ranges"
+      log "failed to fetch Google IP ranges; ${WG_INTERFACE} is not up"
+      return
+    fi
   fi
 
   python3 - "$tmp_json" <<'PY' >"$tmp_ranges"
