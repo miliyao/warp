@@ -182,6 +182,8 @@ generate_warp_profile() {
 }
 
 patch_warp_profile() {
+  sed -i '/^DNS = /d' "$WGCF_PROFILE"
+
   if ! grep -q '^Table = off$' "$WGCF_PROFILE"; then
     sed -i '/^\[Interface\]/a Table = off' "$WGCF_PROFILE"
   fi

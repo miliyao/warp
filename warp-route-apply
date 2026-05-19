@@ -87,7 +87,13 @@ ensure_iptables() {
 }
 
 ensure_policy_route() {
-  ip -4 rule replace fwmark "$MARK_DEC" table "$ROUTE_TABLE"
+  while ip -4 rule del fwmark "$MARK_DEC" table "$ROUTE_TABLE" 2>/dev/null; do
+    :
+  done
+  while ip -4 rule del fwmark "$MARK_HEX" table "$ROUTE_TABLE" 2>/dev/null; do
+    :
+  done
+  ip -4 rule add fwmark "$MARK_DEC" table "$ROUTE_TABLE"
   ip route replace default dev "$WG_INTERFACE" table "$ROUTE_TABLE"
 }
 
