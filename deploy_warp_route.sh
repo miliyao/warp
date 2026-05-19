@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PANEL_USER="${1:-}"
-PANEL_PASS="${2:-}"
-
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Please run as root." >&2
   exit 1
 fi
 
-if [[ -z "$PANEL_USER" || -z "$PANEL_PASS" ]]; then
-  echo "Usage: bash deploy_warp_route.sh <panel_user> <panel_password>" >&2
-  exit 1
-fi
-
-APP_DIR="/opt/warp-route"
 CONFIG_DIR="/etc/warp-route"
 STATE_DIR="/var/lib/warp-route"
 LOG_DIR="/var/log/warp-route"
@@ -26,11 +17,10 @@ GOOGLE_IPSET_NAME="WARP_GOOGLE"
 MARK_HEX="0xca6c"
 MARK_DEC="51820"
 ROUTE_TABLE="51820"
-PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
-SCRIPT_VERSION="2026-05-19.8"
+SCRIPT_VERSION="2026-05-19.9"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -72,13 +62,13 @@ install_wgcf() {
 }
 
 prepare_dirs() {
-  mkdir -p "$APP_DIR" "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR" "$WGCF_DIR"
+  mkdir -p "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR" "$WGCF_DIR"
   chmod 0750 "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR"
 }
 
 copy_app_files() {
-  install_app_file "panel.py" "${APP_DIR}/panel.py" "0755"
   install_app_file "warp-route-apply" /usr/local/sbin/warp-route-apply "0755"
+  install_app_file "warp-route-status" /usr/local/sbin/warp-route-status "0755"
 }
 
 install_app_file() {
@@ -102,15 +92,7 @@ install_app_file() {
 }
 
 write_config() {
-  local escaped_user escaped_pass
-  escaped_user="$(escape_env_value "$PANEL_USER")"
-  escaped_pass="$(escape_env_value "$PANEL_PASS")"
-
-  cat >"${CONFIG_DIR}/panel.env" <<EOF
-PANEL_USER=${escaped_user}
-PANEL_PASS=${escaped_pass}
-PANEL_PORT=${PANEL_PORT}
-APP_DIR=${APP_DIR}
+  cat >"${CONFIG_DIR}/warp-route.env" <<EOF
 CONFIG_DIR=${CONFIG_DIR}
 STATE_DIR=${STATE_DIR}
 LOG_DIR=${LOG_DIR}
@@ -121,14 +103,7 @@ MARK_HEX=${MARK_HEX}
 MARK_DEC=${MARK_DEC}
 ROUTE_TABLE=${ROUTE_TABLE}
 EOF
-  chmod 0600 "${CONFIG_DIR}/panel.env"
-}
-
-escape_env_value() {
-  local value="$1"
-  value="${value//\\/\\\\}"
-  value="${value//\"/\\\"}"
-  printf '"%s"' "$value"
+  chmod 0600 "${CONFIG_DIR}/warp-route.env"
 }
 
 write_default_rules() {
@@ -369,23 +344,6 @@ PY
 }
 
 write_systemd_units() {
-  cat >/etc/systemd/system/warp-route-panel.service <<EOF
-[Unit]
-Description=WARP policy routing web panel
-After=network-online.target wg-quick@${WG_INTERFACE}.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-EnvironmentFile=${CONFIG_DIR}/panel.env
-ExecStart=/usr/bin/python3 ${APP_DIR}/panel.py
-Restart=on-failure
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
   cat >/etc/systemd/system/warp-route-refresh.service <<EOF
 [Unit]
 Description=Refresh WARP policy routing ipset
@@ -394,7 +352,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-EnvironmentFile=${CONFIG_DIR}/panel.env
+EnvironmentFile=${CONFIG_DIR}/warp-route.env
 ExecStart=/usr/local/sbin/warp-route-apply
 EOF
 
@@ -413,6 +371,10 @@ EOF
 }
 
 enable_services() {
+  systemctl disable --now warp-route-panel.service 2>/dev/null || true
+  rm -f /etc/systemd/system/warp-route-panel.service
+  rm -f "${CONFIG_DIR}/panel.env"
+  rm -rf /opt/warp-route
   systemctl daemon-reload
   systemctl enable "wg-quick@${WG_INTERFACE}.service"
   systemctl restart "wg-quick@${WG_INTERFACE}.service" || true
@@ -427,7 +389,6 @@ enable_services() {
   fi
   /usr/local/sbin/warp-route-apply
   systemctl enable --now warp-route-refresh.timer
-  systemctl enable --now warp-route-panel.service
 }
 
 main() {
@@ -446,8 +407,7 @@ main() {
 
   echo
   echo "WARP policy routing is installed."
-  echo "Panel: http://SERVER_IP:${PANEL_PORT}"
-  echo "User: ${PANEL_USER}"
+  echo "Run: warp-route-status"
 }
 
 main "$@"

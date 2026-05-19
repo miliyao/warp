@@ -1,4 +1,5 @@
 *.sh text eol=lf
 warp-route-apply text eol=lf
+warp-route-status text eol=lf
 *.py text eol=lf
 *.md text eol=lf

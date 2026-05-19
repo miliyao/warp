@@ -88,16 +88,17 @@ populate_ipset() {
 }
 
 populate_google_ipset() {
-  local tmp_json
+  local tmp_json tmp_ranges range_count
   tmp_json="$(mktemp)"
+  tmp_ranges="$(mktemp)"
 
   if ! curl -fsSL --max-time 20 "$GOOGLE_RANGES_URL" -o "$tmp_json"; then
-    rm -f "$tmp_json"
+    rm -f "$tmp_json" "$tmp_ranges"
     log "failed to fetch Google IP ranges"
     return
   fi
 
-  python3 - "$tmp_json" <<'PY' >"$GOOGLE_FILE"
+  python3 - "$tmp_json" <<'PY' >"$tmp_ranges"
 import ipaddress
 import json
 import sys
@@ -114,13 +115,21 @@ for prefix in data.get("prefixes", []):
         pass
 PY
 
+  range_count="$(grep -c . "$tmp_ranges" || true)"
+  if [[ "$range_count" -eq 0 ]]; then
+    rm -f "$tmp_json" "$tmp_ranges"
+    log "Google IP ranges response contained no IPv4 prefixes; keeping existing ${GOOGLE_IPSET_NAME}"
+    return
+  fi
+
   while read -r cidr; do
     [[ -z "$cidr" ]] && continue
     ipset add "${GOOGLE_IPSET_NAME}_TMP" "$cidr" -exist
-  done <"$GOOGLE_FILE"
+  done <"$tmp_ranges"
 
   ipset swap "${GOOGLE_IPSET_NAME}_TMP" "$GOOGLE_IPSET_NAME"
   ipset flush "${GOOGLE_IPSET_NAME}_TMP"
+  mv "$tmp_ranges" "$GOOGLE_FILE"
   rm -f "$tmp_json"
   log "refreshed ${GOOGLE_IPSET_NAME}"
 }

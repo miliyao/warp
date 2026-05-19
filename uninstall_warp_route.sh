@@ -6,7 +6,6 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
-APP_DIR="/opt/warp-route"
 CONFIG_DIR="/etc/warp-route"
 STATE_DIR="/var/lib/warp-route"
 LOG_DIR="/var/log/warp-route"
@@ -17,7 +16,12 @@ MARK_HEX="0xca6c"
 MARK_DEC="51820"
 ROUTE_TABLE="51820"
 
-if [[ -f "${CONFIG_DIR}/panel.env" ]]; then
+if [[ -f "${CONFIG_DIR}/warp-route.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${CONFIG_DIR}/warp-route.env"
+  set +a
+elif [[ -f "${CONFIG_DIR}/panel.env" ]]; then
   set -a
   # shellcheck disable=SC1091
   . "${CONFIG_DIR}/panel.env"
@@ -43,7 +47,8 @@ rm -f /etc/systemd/system/warp-route-panel.service
 rm -f /etc/systemd/system/warp-route-refresh.service
 rm -f /etc/systemd/system/warp-route-refresh.timer
 rm -f /usr/local/sbin/warp-route-apply
-rm -rf "$APP_DIR" "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR"
+rm -f /usr/local/sbin/warp-route-status
+rm -rf /opt/warp-route "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR"
 
 systemctl daemon-reload
 

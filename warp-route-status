@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_DIR="${CONFIG_DIR:-/etc/warp-route}"
+STATE_DIR="${STATE_DIR:-/var/lib/warp-route}"
+LOG_DIR="${LOG_DIR:-/var/log/warp-route}"
+WG_INTERFACE="${WG_INTERFACE:-wgcf}"
+IPSET_NAME="${IPSET_NAME:-WARP_IPS}"
+GOOGLE_IPSET_NAME="${GOOGLE_IPSET_NAME:-WARP_GOOGLE}"
+MARK_HEX="${MARK_HEX:-0xca6c}"
+ROUTE_TABLE="${ROUTE_TABLE:-51820}"
+
+if [[ -f "${CONFIG_DIR}/warp-route.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${CONFIG_DIR}/warp-route.env"
+  set +a
+elif [[ -f "${CONFIG_DIR}/panel.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${CONFIG_DIR}/panel.env"
+  set +a
+fi
+
+count_ipset() {
+  local name="$1"
+  ipset list "$name" 2>/dev/null | awk -F': ' '/Number of entries/ {print $2; found=1} END {if (!found) print "0"}'
+}
+
+curl_ip() {
+  local args=("$@")
+  curl -4fsS --max-time 8 "${args[@]}" https://api.ipify.org 2>/dev/null || echo "unavailable"
+}
+
+echo "WARP Route Status"
+echo "================="
+echo "WireGuard service : $(systemctl is-active "wg-quick@${WG_INTERFACE}.service" 2>/dev/null || echo inactive)"
+echo "WireGuard link    : $(ip link show "$WG_INTERFACE" >/dev/null 2>&1 && echo up || echo down)"
+echo "Native IPv4       : $(curl_ip)"
+echo "WARP IPv4         : $(curl_ip --interface "$WG_INTERFACE")"
+echo "Domain IP entries : $(count_ipset "$IPSET_NAME")"
+echo "Google CIDRs      : $(count_ipset "$GOOGLE_IPSET_NAME")"
+echo
+echo "Policy rules:"
+ip rule show | grep -E "fwmark ${MARK_HEX}|lookup ${ROUTE_TABLE}" || true
+echo
+echo "Route table ${ROUTE_TABLE}:"
+ip route show table "$ROUTE_TABLE" || true
+echo
+echo "Recent refresh log:"
+tail -20 "${LOG_DIR}/apply.log" 2>/dev/null || true
