@@ -22,6 +22,7 @@ WGCF_DIR="/etc/wireguard"
 WGCF_PROFILE="${WGCF_DIR}/wgcf.conf"
 WG_INTERFACE="wgcf"
 IPSET_NAME="WARP_IPS"
+GOOGLE_IPSET_NAME="WARP_GOOGLE"
 MARK_HEX="0xca6c"
 MARK_DEC="51820"
 ROUTE_TABLE="51820"
@@ -29,7 +30,7 @@ PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
-SCRIPT_VERSION="2026-05-19.7"
+SCRIPT_VERSION="2026-05-19.8"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -115,6 +116,7 @@ STATE_DIR=${STATE_DIR}
 LOG_DIR=${LOG_DIR}
 WG_INTERFACE=${WG_INTERFACE}
 IPSET_NAME=${IPSET_NAME}
+GOOGLE_IPSET_NAME=${GOOGLE_IPSET_NAME}
 MARK_HEX=${MARK_HEX}
 MARK_DEC=${MARK_DEC}
 ROUTE_TABLE=${ROUTE_TABLE}
@@ -138,7 +140,10 @@ write_default_rules() {
 {
   "domains": [
     "accounts.google.com",
+    "ai.google.dev",
     "fonts.gstatic.com",
+    "gemini.google.com",
+    "generativelanguage.googleapis.com",
     "youtube.com",
     "www.youtube.com",
     "m.youtube.com",
@@ -167,6 +172,45 @@ write_default_rules() {
   }
 }
 EOF
+}
+
+migrate_rules() {
+  python3 - "${CONFIG_DIR}/rules.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+defaults = {
+    "accounts.google.com",
+    "ai.google.dev",
+    "fonts.gstatic.com",
+    "gemini.google.com",
+    "generativelanguage.googleapis.com",
+    "google.com",
+    "googleapis.com",
+    "googlevideo.com",
+    "gstatic.com",
+    "i.ytimg.com",
+    "m.youtube.com",
+    "music.youtube.com",
+    "redirector.googlevideo.com",
+    "s.ytimg.com",
+    "www.google.com",
+    "www.youtube.com",
+    "youtube.com",
+    "youtube.googleapis.com",
+    "youtubei.googleapis.com",
+    "ytimg.com",
+}
+domains = {str(item).strip().lower().rstrip(".") for item in data.get("domains", []) if str(item).strip()}
+data["domains"] = sorted(domains | defaults)
+ips = {str(item).strip() for item in data.get("ips", []) if str(item).strip()}
+data["ips"] = sorted(ips | {"8.8.8.8", "8.8.4.4"})
+data.setdefault("optional_domains", {}).setdefault("openai", ["chatgpt.com", "openai.com"])
+path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+PY
 }
 
 profile_has_ipv4_address() {
@@ -394,6 +438,7 @@ main() {
   copy_app_files
   write_config
   write_default_rules
+  migrate_rules
   generate_warp_profile
   patch_warp_profile
   write_systemd_units

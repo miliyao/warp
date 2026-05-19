@@ -6,12 +6,15 @@ STATE_DIR="${STATE_DIR:-/var/lib/warp-route}"
 LOG_DIR="${LOG_DIR:-/var/log/warp-route}"
 WG_INTERFACE="${WG_INTERFACE:-wgcf}"
 IPSET_NAME="${IPSET_NAME:-WARP_IPS}"
+GOOGLE_IPSET_NAME="${GOOGLE_IPSET_NAME:-WARP_GOOGLE}"
 MARK_HEX="${MARK_HEX:-0xca6c}"
 MARK_DEC="${MARK_DEC:-51820}"
 ROUTE_TABLE="${ROUTE_TABLE:-51820}"
 RULES_JSON="${CONFIG_DIR}/rules.json"
 RESOLVED_FILE="${STATE_DIR}/resolved_ips.txt"
+GOOGLE_FILE="${STATE_DIR}/google_ip_ranges.txt"
 LOG_FILE="${LOG_DIR}/apply.log"
+GOOGLE_RANGES_URL="${GOOGLE_RANGES_URL:-https://www.gstatic.com/ipranges/goog.json}"
 
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 
@@ -23,6 +26,9 @@ ensure_ipset() {
   ipset create "$IPSET_NAME" hash:net family inet -exist
   ipset create "${IPSET_NAME}_TMP" hash:net family inet -exist
   ipset flush "${IPSET_NAME}_TMP"
+  ipset create "$GOOGLE_IPSET_NAME" hash:net family inet -exist
+  ipset create "${GOOGLE_IPSET_NAME}_TMP" hash:net family inet -exist
+  ipset flush "${GOOGLE_IPSET_NAME}_TMP"
 }
 
 read_rules() {
@@ -81,9 +87,49 @@ populate_ipset() {
   log "refreshed ${IPSET_NAME}"
 }
 
+populate_google_ipset() {
+  local tmp_json
+  tmp_json="$(mktemp)"
+
+  if ! curl -fsSL --max-time 20 "$GOOGLE_RANGES_URL" -o "$tmp_json"; then
+    rm -f "$tmp_json"
+    log "failed to fetch Google IP ranges"
+    return
+  fi
+
+  python3 - "$tmp_json" <<'PY' >"$GOOGLE_FILE"
+import ipaddress
+import json
+import sys
+from pathlib import Path
+
+data = json.loads(Path(sys.argv[1]).read_text())
+for prefix in data.get("prefixes", []):
+    value = prefix.get("ipv4Prefix")
+    if not value:
+        continue
+    try:
+        print(ipaddress.ip_network(value, strict=False))
+    except ValueError:
+        pass
+PY
+
+  while read -r cidr; do
+    [[ -z "$cidr" ]] && continue
+    ipset add "${GOOGLE_IPSET_NAME}_TMP" "$cidr" -exist
+  done <"$GOOGLE_FILE"
+
+  ipset swap "${GOOGLE_IPSET_NAME}_TMP" "$GOOGLE_IPSET_NAME"
+  ipset flush "${GOOGLE_IPSET_NAME}_TMP"
+  rm -f "$tmp_json"
+  log "refreshed ${GOOGLE_IPSET_NAME}"
+}
+
 ensure_iptables() {
   iptables -t mangle -C OUTPUT -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX" 2>/dev/null ||
     iptables -t mangle -A OUTPUT -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX"
+  iptables -t mangle -C OUTPUT -m set --match-set "$GOOGLE_IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX" 2>/dev/null ||
+    iptables -t mangle -A OUTPUT -m set --match-set "$GOOGLE_IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX"
 }
 
 ensure_policy_route() {
@@ -110,6 +156,7 @@ main() {
 
   ensure_ipset
   populate_ipset
+  populate_google_ipset
   ensure_iptables
   ensure_policy_route
 }

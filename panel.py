@@ -21,6 +21,7 @@ LOG_DIR = Path(os.environ.get("LOG_DIR", "/var/log/warp-route"))
 WG_INTERFACE = os.environ.get("WG_INTERFACE", "wgcf")
 RULES_PATH = CONFIG_DIR / "rules.json"
 RESOLVED_PATH = STATE_DIR / "resolved_ips.txt"
+GOOGLE_RANGES_PATH = STATE_DIR / "google_ip_ranges.txt"
 APPLY_LOG = LOG_DIR / "apply.log"
 
 
@@ -90,6 +91,12 @@ def service_state(name):
 def wg_show():
     code, output = run(["wg", "show", WG_INTERFACE], timeout=4)
     return output if code == 0 and output else "unavailable"
+
+
+def line_count(path):
+    if not path.exists():
+        return 0
+    return len([line for line in path.read_text(errors="replace").splitlines() if line.strip()])
 
 
 def tail(path, limit=120):
@@ -214,6 +221,7 @@ class Handler(BaseHTTPRequestHandler):
   <section class="card"><h2>Direct Public IP</h2><div class="metric">{shell_escape(public_ip())}</div></section>
   <section class="card"><h2>WARP Public IP</h2><div class="metric">{shell_escape(warp_ip())}</div></section>
   <section class="card"><h2>WireGuard</h2><div class="metric">{shell_escape(service_state(f"wg-quick@{WG_INTERFACE}.service"))}</div></section>
+  <section class="card"><h2>Google CIDRs</h2><div class="metric">{line_count(GOOGLE_RANGES_PATH)}</div></section>
   <section class="card"><h2>Panel</h2><div class="metric">{shell_escape(service_state("warp-route-panel.service"))}</div></section>
 </div>
 <section class="card"><h2>WireGuard Stats</h2><pre>{shell_escape(wg_show())}</pre></section>

@@ -10,8 +10,10 @@ SSH and hosted websites, keeps using the VPS native network.
 - `wg-quick@wgcf` with `Table = off`, so WireGuard does not replace the main
   routing table.
 - `ipset` set `WARP_IPS` for destinations that should use WARP.
+- `ipset` set `WARP_GOOGLE` for official Google IPv4 ranges from
+  `https://www.gstatic.com/ipranges/goog.json`.
 - `iptables -t mangle` OUTPUT marking for traffic whose destination is in
-  `WARP_IPS`.
+  `WARP_IPS` or `WARP_GOOGLE`.
 - `ip rule` and route table `51820`, sending marked traffic through `wgcf`.
 - A small Python stdlib web panel on TCP `8080`.
 
@@ -53,12 +55,17 @@ bash deploy_warp_route.sh <panel_user> <panel_password>
 
 The default route list includes:
 
+- official Google IPv4 ranges, covering Google Search, YouTube, Gemini, Google
+  APIs, gstatic, and other Google-owned frontends
 - `youtube.com`
 - `googlevideo.com`
 - `ytimg.com`
 - `google.com`
 - `googleapis.com`
 - `gstatic.com`
+- `gemini.google.com`
+- `generativelanguage.googleapis.com`
+- `ai.google.dev`
 - `8.8.8.8`
 - `8.8.4.4`
 
@@ -70,7 +77,7 @@ Rules live in:
 
 The web panel can edit the domains and IP/CIDR entries. Saving rules refreshes
 the `ipset` immediately. A systemd timer also refreshes DNS-derived IPs every
-30 minutes.
+30 minutes, and refreshes official Google IPv4 ranges into `WARP_GOOGLE`.
 
 ## Useful Commands
 
@@ -102,6 +109,13 @@ View resolved WARP destinations:
 
 ```bash
 sudo cat /var/lib/warp-route/resolved_ips.txt
+```
+
+View Google IPv4 ranges routed through WARP:
+
+```bash
+sudo head -40 /var/lib/warp-route/google_ip_ranges.txt
+sudo ipset list WARP_GOOGLE | head -40
 ```
 
 ## Troubleshooting

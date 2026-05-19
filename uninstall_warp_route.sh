@@ -12,6 +12,7 @@ STATE_DIR="/var/lib/warp-route"
 LOG_DIR="/var/log/warp-route"
 WG_INTERFACE="wgcf"
 IPSET_NAME="WARP_IPS"
+GOOGLE_IPSET_NAME="WARP_GOOGLE"
 MARK_HEX="0xca6c"
 MARK_DEC="51820"
 ROUTE_TABLE="51820"
@@ -29,11 +30,14 @@ systemctl stop warp-route-refresh.service 2>/dev/null || true
 systemctl disable --now "wg-quick@${WG_INTERFACE}.service" 2>/dev/null || true
 
 iptables -t mangle -D OUTPUT -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX" 2>/dev/null || true
+iptables -t mangle -D OUTPUT -m set --match-set "$GOOGLE_IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX" 2>/dev/null || true
 ip rule del fwmark "$MARK_HEX" table "$ROUTE_TABLE" 2>/dev/null || true
 ip rule del fwmark "$MARK_DEC" table "$ROUTE_TABLE" 2>/dev/null || true
 ip route flush table "$ROUTE_TABLE" 2>/dev/null || true
 ipset destroy "$IPSET_NAME" 2>/dev/null || true
 ipset destroy "${IPSET_NAME}_TMP" 2>/dev/null || true
+ipset destroy "$GOOGLE_IPSET_NAME" 2>/dev/null || true
+ipset destroy "${GOOGLE_IPSET_NAME}_TMP" 2>/dev/null || true
 
 rm -f /etc/systemd/system/warp-route-panel.service
 rm -f /etc/systemd/system/warp-route-refresh.service
