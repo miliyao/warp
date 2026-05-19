@@ -29,6 +29,7 @@ PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
+SCRIPT_VERSION="2026-05-19.4"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -185,9 +186,32 @@ generate_warp_profile() {
 }
 
 patch_warp_profile() {
-  sed -i '/^DNS = /d' "$WGCF_PROFILE"
-  sed -i -E '/^Address = / s/, *[0-9a-fA-F:]+\/[0-9]+//g' "$WGCF_PROFILE"
-  sed -i -E '/^AllowedIPs = / s/, *::\/0//g' "$WGCF_PROFILE"
+  python3 - "$WGCF_PROFILE" <<'PY'
+import ipaddress
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+lines = []
+
+for line in path.read_text().splitlines():
+    if line.startswith("DNS = "):
+        continue
+
+    if line.startswith("Address = "):
+        values = [value.strip() for value in line.split("=", 1)[1].split(",")]
+        values = [value for value in values if ipaddress.ip_interface(value).version == 4]
+        line = "Address = " + ", ".join(values)
+
+    if line.startswith("AllowedIPs = "):
+        values = [value.strip() for value in line.split("=", 1)[1].split(",")]
+        values = [value for value in values if ipaddress.ip_network(value, strict=False).version == 4]
+        line = "AllowedIPs = " + ", ".join(values)
+
+    lines.append(line)
+
+path.write_text("\n".join(lines) + "\n")
+PY
 
   if ! grep -q '^Table = off$' "$WGCF_PROFILE"; then
     sed -i '/^\[Interface\]/a Table = off' "$WGCF_PROFILE"
@@ -261,6 +285,7 @@ enable_services() {
 }
 
 main() {
+  echo "warp-route installer ${SCRIPT_VERSION}"
   install_packages
   install_wgcf
   prepare_dirs
