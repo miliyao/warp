@@ -186,6 +186,8 @@ generate_warp_profile() {
 
 patch_warp_profile() {
   sed -i '/^DNS = /d' "$WGCF_PROFILE"
+  sed -i -E '/^Address = / s/, *[0-9a-fA-F:]+\/[0-9]+//g' "$WGCF_PROFILE"
+  sed -i -E '/^AllowedIPs = / s/, *::\/0//g' "$WGCF_PROFILE"
 
   if ! grep -q '^Table = off$' "$WGCF_PROFILE"; then
     sed -i '/^\[Interface\]/a Table = off' "$WGCF_PROFILE"
@@ -242,7 +244,14 @@ EOF
 
 enable_services() {
   systemctl daemon-reload
-  systemctl enable --now "wg-quick@${WG_INTERFACE}.service"
+  if ! systemctl enable --now "wg-quick@${WG_INTERFACE}.service"; then
+    echo
+    echo "Failed to start wg-quick@${WG_INTERFACE}.service." >&2
+    echo "Run these commands for details:" >&2
+    echo "  systemctl status wg-quick@${WG_INTERFACE}.service" >&2
+    echo "  journalctl -xeu wg-quick@${WG_INTERFACE}.service" >&2
+    exit 1
+  fi
   /usr/local/sbin/warp-route-apply
   systemctl enable --now warp-route-refresh.timer
   systemctl enable --now warp-route-panel.service

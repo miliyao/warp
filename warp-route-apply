@@ -87,6 +87,11 @@ ensure_iptables() {
 }
 
 ensure_policy_route() {
+  if ! ip link show "$WG_INTERFACE" >/dev/null 2>&1; then
+    echo "WireGuard interface ${WG_INTERFACE} is not up. Check wg-quick@${WG_INTERFACE}.service." >&2
+    exit 1
+  fi
+
   while ip -4 rule del fwmark "$MARK_DEC" table "$ROUTE_TABLE" 2>/dev/null; do
     :
   done
