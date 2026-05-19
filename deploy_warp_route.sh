@@ -29,7 +29,7 @@ PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
-SCRIPT_VERSION="2026-05-19.6"
+SCRIPT_VERSION="2026-05-19.7"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -223,7 +223,13 @@ import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-lines = []
+original = path.read_text().splitlines()
+ipv4_addresses = []
+ipv4_allowed = []
+output = []
+section = None
+interface_written = False
+allowed_written = False
 
 def ipv4_interfaces(raw):
     values = []
@@ -251,34 +257,71 @@ def ipv4_networks(raw):
             values.append(value)
     return values
 
+for line in original:
+    if line.startswith("Address = "):
+        ipv4_addresses.extend(ipv4_interfaces(line.split("=", 1)[1]))
+    if line.startswith("AllowedIPs = "):
+        ipv4_allowed.extend(ipv4_networks(line.split("=", 1)[1]))
+
+if not ipv4_addresses:
+    raise SystemExit("WARP profile has no IPv4 Address entry")
+if not ipv4_allowed:
+    ipv4_allowed = ["0.0.0.0/0"]
+
+ipv4_addresses = list(dict.fromkeys(ipv4_addresses))
+ipv4_allowed = list(dict.fromkeys(ipv4_allowed))
+
+def write_interface_settings():
+    global interface_written
+    if interface_written:
+        return
+    output.append("Address = " + ", ".join(ipv4_addresses))
+    output.append("Table = off")
+    output.append("MTU = 1280")
+    interface_written = True
+
 for line in path.read_text().splitlines():
-    if line.startswith("DNS = "):
+    stripped = line.strip()
+
+    if stripped == "[Interface]":
+        section = "Interface"
+        output.append(line)
         continue
 
-    if line.startswith("Address = "):
-        values = ipv4_interfaces(line.split("=", 1)[1])
-        if not values:
-            raise SystemExit("WARP profile has no IPv4 Address entry")
-        line = "Address = " + ", ".join(values)
+    if stripped == "[Peer]":
+        if section == "Interface":
+            write_interface_settings()
+        section = "Peer"
+        output.append(line)
+        continue
 
-    if line.startswith("AllowedIPs = "):
-        values = ipv4_networks(line.split("=", 1)[1])
-        if not values:
-            values = ["0.0.0.0/0"]
-        line = "AllowedIPs = " + ", ".join(values)
+    if stripped.startswith("[") and stripped.endswith("]"):
+        if section == "Interface":
+            write_interface_settings()
+        section = stripped.strip("[]")
+        output.append(line)
+        continue
 
-    lines.append(line)
+    if section == "Interface" and line.startswith(("Address = ", "DNS = ", "Table = ", "MTU = ")):
+        continue
 
-path.write_text("\n".join(lines) + "\n")
+    if section == "Peer" and line.startswith("AllowedIPs = "):
+        if allowed_written:
+            continue
+        output.append("AllowedIPs = " + ", ".join(ipv4_allowed))
+        allowed_written = True
+        continue
+
+    output.append(line)
+
+if section == "Interface":
+    write_interface_settings()
+
+if not allowed_written:
+    output.append("AllowedIPs = " + ", ".join(ipv4_allowed))
+
+path.write_text("\n".join(output) + "\n")
 PY
-
-  if ! grep -q '^Table = off$' "$WGCF_PROFILE"; then
-    sed -i '/^\[Interface\]/a Table = off' "$WGCF_PROFILE"
-  fi
-
-  if ! grep -q '^MTU = ' "$WGCF_PROFILE"; then
-    sed -i '/^\[Interface\]/a MTU = 1280' "$WGCF_PROFILE"
-  fi
 }
 
 write_systemd_units() {
