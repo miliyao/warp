@@ -29,7 +29,7 @@ PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
-SCRIPT_VERSION="2026-05-19.5"
+SCRIPT_VERSION="2026-05-19.6"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -169,12 +169,43 @@ write_default_rules() {
 EOF
 }
 
+profile_has_ipv4_address() {
+  python3 - "$1" <<'PY'
+import ipaddress
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+for line in path.read_text(errors="replace").splitlines():
+    if not line.startswith("Address = "):
+        continue
+    for value in (item.strip() for item in line.split("=", 1)[1].split(",")):
+        if not value:
+            continue
+        try:
+            if ipaddress.ip_interface(value).version == 4:
+                raise SystemExit(0)
+        except ValueError:
+            continue
+raise SystemExit(1)
+PY
+}
+
 generate_warp_profile() {
+  local tmp backup
+
   if [[ -f "$WGCF_PROFILE" ]]; then
-    return
+    if profile_has_ipv4_address "$WGCF_PROFILE"; then
+      return
+    fi
+
+    backup="${WGCF_PROFILE}.bak.$(date +%Y%m%d%H%M%S)"
+    echo "Existing WARP profile has no IPv4 Address; backing up to ${backup} and regenerating." >&2
+    systemctl stop "wg-quick@${WG_INTERFACE}.service" 2>/dev/null || true
+    cp -a "$WGCF_PROFILE" "$backup"
+    rm -f "$WGCF_PROFILE"
   fi
 
-  local tmp
   tmp="$(mktemp -d)"
   pushd "$tmp" >/dev/null
   wgcf register --accept-tos
