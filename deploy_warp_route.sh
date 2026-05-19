@@ -244,7 +244,10 @@ EOF
 
 enable_services() {
   systemctl daemon-reload
-  if ! systemctl enable --now "wg-quick@${WG_INTERFACE}.service"; then
+  systemctl enable "wg-quick@${WG_INTERFACE}.service"
+  systemctl restart "wg-quick@${WG_INTERFACE}.service" || true
+
+  if ! systemctl is-active --quiet "wg-quick@${WG_INTERFACE}.service"; then
     echo
     echo "Failed to start wg-quick@${WG_INTERFACE}.service." >&2
     echo "Run these commands for details:" >&2

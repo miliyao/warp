@@ -24,13 +24,13 @@ SSH and hosted websites, keeps using the VPS native network.
 ## One-Line Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/miliyao/warp/main/deploy_warp_route.sh | INSTALL_SOURCE=remote bash -s -- <panel_user> <panel_password>
+curl -fsSL "https://raw.githubusercontent.com/miliyao/warp/main/deploy_warp_route.sh?$(date +%s)" | INSTALL_SOURCE=remote bash -s -- <panel_user> <panel_password>
 ```
 
 Example:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/miliyao/warp/main/deploy_warp_route.sh | INSTALL_SOURCE=remote bash -s -- admin MyPass123
+curl -fsSL "https://raw.githubusercontent.com/miliyao/warp/main/deploy_warp_route.sh?$(date +%s)" | INSTALL_SOURCE=remote bash -s -- admin MyPass123
 ```
 
 Open:
