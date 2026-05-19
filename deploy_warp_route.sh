@@ -201,11 +201,15 @@ for line in path.read_text().splitlines():
     if line.startswith("Address = "):
         values = [value.strip() for value in line.split("=", 1)[1].split(",")]
         values = [value for value in values if ipaddress.ip_interface(value).version == 4]
+        if not values:
+            raise SystemExit("WARP profile has no IPv4 Address entry")
         line = "Address = " + ", ".join(values)
 
     if line.startswith("AllowedIPs = "):
         values = [value.strip() for value in line.split("=", 1)[1].split(",")]
         values = [value for value in values if ipaddress.ip_network(value, strict=False).version == 4]
+        if not values:
+            values = ["0.0.0.0/0"]
         line = "AllowedIPs = " + ", ".join(values)
 
     lines.append(line)
