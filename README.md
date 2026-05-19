@@ -11,6 +11,7 @@ Gemini 等目标走 WARP 出口。SSH、建站和其它普通流量继续走 VPS
 - 使用 `ipset + iptables mark + ip rule` 实现策略路由。
 - 自动拉取 Google 官方 IPv4 段：
   `https://www.gstatic.com/ipranges/goog.json`
+- 内置一份 Google IPv4 段快照，在线拉取失败时自动兜底。
 - 默认覆盖 Google Search、YouTube、Gemini、Google APIs、gstatic、
   googlevideo 等 Google 自有前端。
 - 无 Web 面板，无额外常驻应用；只保留 systemd 定时刷新任务。
