@@ -29,7 +29,7 @@ PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
-SCRIPT_VERSION="2026-05-19.4"
+SCRIPT_VERSION="2026-05-19.5"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -194,20 +194,44 @@ from pathlib import Path
 path = Path(sys.argv[1])
 lines = []
 
+def ipv4_interfaces(raw):
+    values = []
+    for value in (item.strip() for item in raw.split(",")):
+        if not value:
+            continue
+        try:
+            parsed = ipaddress.ip_interface(value)
+        except ValueError:
+            continue
+        if parsed.version == 4:
+            values.append(value)
+    return values
+
+def ipv4_networks(raw):
+    values = []
+    for value in (item.strip() for item in raw.split(",")):
+        if not value:
+            continue
+        try:
+            parsed = ipaddress.ip_network(value, strict=False)
+        except ValueError:
+            continue
+        if parsed.version == 4:
+            values.append(value)
+    return values
+
 for line in path.read_text().splitlines():
     if line.startswith("DNS = "):
         continue
 
     if line.startswith("Address = "):
-        values = [value.strip() for value in line.split("=", 1)[1].split(",")]
-        values = [value for value in values if ipaddress.ip_interface(value).version == 4]
+        values = ipv4_interfaces(line.split("=", 1)[1])
         if not values:
             raise SystemExit("WARP profile has no IPv4 Address entry")
         line = "Address = " + ", ".join(values)
 
     if line.startswith("AllowedIPs = "):
-        values = [value.strip() for value in line.split("=", 1)[1].split(",")]
-        values = [value for value in values if ipaddress.ip_network(value, strict=False).version == 4]
+        values = ipv4_networks(line.split("=", 1)[1])
         if not values:
             values = ["0.0.0.0/0"]
         line = "AllowedIPs = " + ", ".join(values)
