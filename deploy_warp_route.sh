@@ -27,6 +27,7 @@ MARK_DEC="51820"
 ROUTE_TABLE="51820"
 PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
+RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -73,8 +74,26 @@ prepare_dirs() {
 }
 
 copy_app_files() {
-  install -m 0755 "$(dirname "$0")/panel.py" "${APP_DIR}/panel.py"
-  install -m 0755 "$(dirname "$0")/warp-route-apply" /usr/local/sbin/warp-route-apply
+  install_app_file "panel.py" "${APP_DIR}/panel.py" "0755"
+  install_app_file "warp-route-apply" /usr/local/sbin/warp-route-apply "0755"
+}
+
+install_app_file() {
+  local name="$1"
+  local target="$2"
+  local mode="$3"
+  local script_dir source
+
+  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P || true)"
+  source="${script_dir}/${name}"
+
+  if [[ -n "$script_dir" && -f "$source" ]]; then
+    install -m "$mode" "$source" "$target"
+    return
+  fi
+
+  curl -fsSL "${RAW_BASE_URL}/${name}" -o "$target"
+  chmod "$mode" "$target"
 }
 
 write_config() {

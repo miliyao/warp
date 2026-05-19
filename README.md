@@ -21,16 +21,16 @@ SSH and hosted websites, keeps using the VPS native network.
 - Root access
 - Kernel support for WireGuard, iptables, and ipset
 
-## Install
+## One-Line Install
 
 ```bash
-bash deploy_warp_route.sh <panel_user> <panel_password>
+curl -fsSL https://raw.githubusercontent.com/miliyao/warp/main/deploy_warp_route.sh | bash -s -- <panel_user> <panel_password>
 ```
 
 Example:
 
 ```bash
-bash deploy_warp_route.sh admin MyPass123
+curl -fsSL https://raw.githubusercontent.com/miliyao/warp/main/deploy_warp_route.sh | bash -s -- admin MyPass123
 ```
 
 Open:
@@ -40,6 +40,14 @@ http://SERVER_IP:8080
 ```
 
 Allow TCP `8080` in the cloud provider firewall if needed.
+
+## Manual Install
+
+```bash
+git clone https://github.com/miliyao/warp.git
+cd warp
+bash deploy_warp_route.sh <panel_user> <panel_password>
+```
 
 ## Default Rules
 
@@ -99,7 +107,7 @@ sudo cat /var/lib/warp-route/resolved_ips.txt
 ## Uninstall
 
 ```bash
-bash uninstall_warp_route.sh
+curl -fsSL https://raw.githubusercontent.com/miliyao/warp/main/uninstall_warp_route.sh | bash
 ```
 
 The uninstall script removes services, iptables rules, policy routing rules,
