@@ -195,10 +195,10 @@ populate_google_ipset() {
   tmp_ranges="$(mktemp)"
   fetched_json=0
 
-  if curl -4fsSL --retry 2 --connect-timeout 8 --max-time 25 "$GOOGLE_RANGES_URL" -o "$tmp_json"; then
+  if curl -4fsSL --retry 1 --connect-timeout 5 --max-time 12 "$GOOGLE_RANGES_URL" -o "$tmp_json" 2>/dev/null; then
     fetched_json=1
   elif ip link show "$WG_INTERFACE" >/dev/null 2>&1 &&
-    curl -4fsSL --interface "$WG_INTERFACE" --retry 2 --connect-timeout 8 --max-time 25 "$GOOGLE_RANGES_URL" -o "$tmp_json"; then
+    curl -4fsSL --interface "$WG_INTERFACE" --retry 1 --connect-timeout 5 --max-time 12 "$GOOGLE_RANGES_URL" -o "$tmp_json" 2>/dev/null; then
     fetched_json=1
     log "fetched Google IP ranges via ${WG_INTERFACE}"
   else

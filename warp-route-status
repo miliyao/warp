@@ -29,7 +29,13 @@ count_ipset() {
 
 curl_ip() {
   local args=("$@")
-  curl -4fsS --max-time 8 "${args[@]}" https://api.ipify.org 2>/dev/null || echo "unavailable"
+  local url
+  for url in https://api.ipify.org https://ifconfig.me/ip https://icanhazip.com; do
+    if curl -4fsS --connect-timeout 4 --max-time 8 "${args[@]}" "$url" 2>/dev/null; then
+      return
+    fi
+  done
+  echo "unavailable"
 }
 
 echo "WARP Route Status"

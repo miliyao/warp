@@ -20,7 +20,7 @@ ROUTE_TABLE="51820"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
 INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
-SCRIPT_VERSION="2026-05-19.9"
+SCRIPT_VERSION="2026-05-19.10"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
