@@ -28,6 +28,7 @@ ROUTE_TABLE="51820"
 PANEL_PORT="8080"
 WGCF_VERSION="2.2.22"
 RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/miliyao/warp/main}"
+INSTALL_SOURCE="${INSTALL_SOURCE:-auto}"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1
@@ -84,12 +85,14 @@ install_app_file() {
   local mode="$3"
   local script_dir source
 
-  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P || true)"
-  source="${script_dir}/${name}"
+  if [[ "$INSTALL_SOURCE" != "remote" ]]; then
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P || true)"
+    source="${script_dir}/${name}"
 
-  if [[ -n "$script_dir" && -f "$source" ]]; then
-    install -m "$mode" "$source" "$target"
-    return
+    if [[ -n "$script_dir" && -f "$source" && "$source" != "$target" ]]; then
+      install -m "$mode" "$source" "$target"
+      return
+    fi
   fi
 
   curl -fsSL "${RAW_BASE_URL}/${name}" -o "$target"
