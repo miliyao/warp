@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_DIR="${CONFIG_DIR:-/etc/warp-route}"
+STATE_DIR="${STATE_DIR:-/var/lib/warp-route}"
+LOG_DIR="${LOG_DIR:-/var/log/warp-route}"
+WG_INTERFACE="${WG_INTERFACE:-wgcf}"
+IPSET_NAME="${IPSET_NAME:-WARP_IPS}"
+MARK_HEX="${MARK_HEX:-0xca6c}"
+MARK_DEC="${MARK_DEC:-51820}"
+ROUTE_TABLE="${ROUTE_TABLE:-51820}"
+RULES_JSON="${CONFIG_DIR}/rules.json"
+RESOLVED_FILE="${STATE_DIR}/resolved_ips.txt"
+LOG_FILE="${LOG_DIR}/apply.log"
+
+mkdir -p "$STATE_DIR" "$LOG_DIR"
+
+log() {
+  printf '%s %s\n' "$(date -Is)" "$*" | tee -a "$LOG_FILE" >/dev/null
+}
+
+ensure_ipset() {
+  ipset create "$IPSET_NAME" hash:net family inet -exist
+  ipset create "${IPSET_NAME}_TMP" hash:net family inet -exist
+  ipset flush "${IPSET_NAME}_TMP"
+}
+
+read_rules() {
+  python3 - "$RULES_JSON" <<'PY'
+import ipaddress
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+for value in data.get("ips", []):
+    try:
+        print("ip", ipaddress.ip_network(value, strict=False))
+    except ValueError:
+        print(f"invalid_ip {value}", file=sys.stderr)
+for value in data.get("domains", []):
+    value = str(value).strip().lower().rstrip(".")
+    if value:
+        print("domain", value)
+PY
+}
+
+resolve_domain() {
+  local domain="$1"
+  if command -v dig >/dev/null 2>&1; then
+    dig +short A "$domain" | awk '/^[0-9.]+$/ {print}'
+  elif command -v getent >/dev/null 2>&1; then
+    getent ahostsv4 "$domain" | awk '{print $1}' | sort -u
+  else
+    return 0
+  fi
+}
+
+populate_ipset() {
+  : >"$RESOLVED_FILE"
+
+  while read -r type value; do
+    case "$type" in
+      ip)
+        ipset add "${IPSET_NAME}_TMP" "$value" -exist
+        printf '%s direct\n' "$value" >>"$RESOLVED_FILE"
+        ;;
+      domain)
+        while read -r ip; do
+          [[ -z "$ip" ]] && continue
+          ipset add "${IPSET_NAME}_TMP" "$ip" -exist
+          printf '%s %s\n' "$ip" "$value" >>"$RESOLVED_FILE"
+        done < <(resolve_domain "$value")
+        ;;
+    esac
+  done < <(read_rules)
+
+  ipset swap "${IPSET_NAME}_TMP" "$IPSET_NAME"
+  ipset flush "${IPSET_NAME}_TMP"
+  log "refreshed ${IPSET_NAME}"
+}
+
+ensure_iptables() {
+  iptables -t mangle -C OUTPUT -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX" 2>/dev/null ||
+    iptables -t mangle -A OUTPUT -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "$MARK_HEX"
+}
+
+ensure_policy_route() {
+  ip -4 rule replace fwmark "$MARK_DEC" table "$ROUTE_TABLE"
+  ip route replace default dev "$WG_INTERFACE" table "$ROUTE_TABLE"
+}
+
+main() {
+  if [[ ! -f "$RULES_JSON" ]]; then
+    echo "Missing ${RULES_JSON}" >&2
+    exit 1
+  fi
+
+  ensure_ipset
+  populate_ipset
+  ensure_iptables
+  ensure_policy_route
+}
+
+main "$@"

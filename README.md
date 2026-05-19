@@ -1,0 +1,114 @@
+# Cloudflare WARP Policy Routing
+
+Deploy Cloudflare WARP on an Ubuntu/Debian VPS and route only selected
+destination IPs through the WARP WireGuard interface. Other traffic, including
+SSH and hosted websites, keeps using the VPS native network.
+
+## What It Installs
+
+- `wgcf` to register and generate a Cloudflare WARP WireGuard profile.
+- `wg-quick@wgcf` with `Table = off`, so WireGuard does not replace the main
+  routing table.
+- `ipset` set `WARP_IPS` for destinations that should use WARP.
+- `iptables -t mangle` OUTPUT marking for traffic whose destination is in
+  `WARP_IPS`.
+- `ip rule` and route table `51820`, sending marked traffic through `wgcf`.
+- A small Python stdlib web panel on TCP `8080`.
+
+## Requirements
+
+- Ubuntu 20.04+ or Debian 11+
+- Root access
+- Kernel support for WireGuard, iptables, and ipset
+
+## Install
+
+```bash
+bash deploy_warp_route.sh <panel_user> <panel_password>
+```
+
+Example:
+
+```bash
+bash deploy_warp_route.sh admin MyPass123
+```
+
+Open:
+
+```text
+http://SERVER_IP:8080
+```
+
+Allow TCP `8080` in the cloud provider firewall if needed.
+
+## Default Rules
+
+The default route list includes:
+
+- `youtube.com`
+- `googlevideo.com`
+- `ytimg.com`
+- `google.com`
+- `googleapis.com`
+- `gstatic.com`
+- `8.8.8.8`
+- `8.8.4.4`
+
+Rules live in:
+
+```text
+/etc/warp-route/rules.json
+```
+
+The web panel can edit the domains and IP/CIDR entries. Saving rules refreshes
+the `ipset` immediately. A systemd timer also refreshes DNS-derived IPs every
+30 minutes.
+
+## Useful Commands
+
+Check native exit IP:
+
+```bash
+curl -4 https://api.ipify.org
+```
+
+Check WARP exit IP:
+
+```bash
+curl -4 --interface wgcf https://api.ipify.org
+```
+
+Refresh routing rules:
+
+```bash
+sudo /usr/local/sbin/warp-route-apply
+```
+
+View WireGuard status:
+
+```bash
+sudo wg show wgcf
+```
+
+View resolved WARP destinations:
+
+```bash
+sudo cat /var/lib/warp-route/resolved_ips.txt
+```
+
+## Uninstall
+
+```bash
+bash uninstall_warp_route.sh
+```
+
+The uninstall script removes services, iptables rules, policy routing rules,
+ipsets, and app files. It intentionally leaves `/etc/wireguard/wgcf.conf` in
+place so WARP credentials are not destroyed unexpectedly.
+
+## Notes
+
+This project routes server-originated traffic from the local VPS `OUTPUT`
+chain. It does not automatically route forwarded traffic from another client or
+proxy process unless that traffic is generated locally on the VPS and matches
+the destination set.
